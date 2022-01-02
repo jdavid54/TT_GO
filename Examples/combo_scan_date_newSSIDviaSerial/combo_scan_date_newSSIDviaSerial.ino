@@ -1,19 +1,3 @@
-/*
-code	color
-0x0000	Black
-0xFFFF	White
-0xBDF7	Light Gray
-0x7BEF	Dark Gray
-0xF800	Red
-0xFFE0	Yellow
-0xFBE0	Orange
-0x79E0	Brown
-0x7E0	Green
-0x7FF	Cyan
-0x1F	Blue
-0xF81F	Pink
- */
-
 #include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
 #include <SPI.h>
 #include <WiFi.h>
@@ -56,6 +40,7 @@ uint32_t targetTime = 0;       // for next 1 second timeout
 struct tm timeinfo;          // https://koor.fr/C/ctime/struct_tm.wp
 int hh, mm, ss, wday, year, mon, yday;
 const char * days[] = {"Sun,", "Mon,", "Tue,", "Wed,", "Thu,", "Fri,", "Sat,"};
+char buf[64];
 
 byte omm = 99;
 boolean initial = 1;
@@ -76,12 +61,10 @@ boolean back = 1;   // back from scan
 
 //uint8_t hh=conv2d(__TIME__), mm=conv2d(__TIME__+3), ss=conv2d(__TIME__+6);  // Get H, M, S from compile time
 
-void printLocalTime(){
-  if(!getLocalTime(&timeinfo)){
-    Serial.println("Failed to obtain time");
-    return;
-  }
-  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+void printLocalTime(){ 
+  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");  
+  Serial.println(buf);
+  
 }
 
 // INTRPT Function to execute when Button 1 is Pushed
@@ -128,7 +111,12 @@ void connect() {
 void get_data() {
   //get the date and time and print on serial port
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  printLocalTime();
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return;
+  }  
+  size_t written = strftime(buf, 64, "%b %d %Y", &timeinfo);
+  //Serial.println(written);
 }
 
 void disconnect() {
@@ -141,17 +129,17 @@ void disconnect() {
 
 void get_localtime() {
   // get local time
-  if(!getLocalTime(&timeinfo)){
-    Serial.println("Failed to obtain time");
-  }
+  get_data();
+  
   hh=timeinfo.tm_hour, mm=timeinfo.tm_min, ss=timeinfo.tm_sec, wday=timeinfo.tm_wday;
   mon=timeinfo.tm_mon, year=timeinfo.tm_year, yday=timeinfo.tm_yday;
-  
 }
+
 
 void welcome() {
   Serial.println("==============================================================================");
-  Serial.println("Welcome to TTGO Display");
+  Serial.print("Welcome to TTGO Display\nCompiled date : ");
+  Serial.print(__DATE__); Serial.print(" "); Serial.println(__TIME__);
   Serial.println("First we will try to connect to the embedded SSIDs.");
   Serial.println("To change for a new SSID, send new ssid then new password from serial window"); 
   Serial.println("Press left button to toggle between Clock/Wifi scan.");
@@ -191,13 +179,12 @@ void setup(void) {
     else Serial.println(" Not connected !");
   }
     
-  get_data();
-  disconnect();
-
   get_localtime();
+  disconnect();
+  printLocalTime();
   
   // init timer to 1 second
-  targetTime = millis() + 1000;   
+  targetTime = millis() + 1000;      
 }
 
 boolean serial1 = true;
