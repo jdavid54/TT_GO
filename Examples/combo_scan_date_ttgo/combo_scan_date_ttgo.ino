@@ -1,33 +1,34 @@
-/*
-code	color
-0x0000	Black
-0xFFFF	White
-0xBDF7	Light Gray
-0x7BEF	Dark Gray
-0xF800	Red
-0xFFE0	Yellow
-0xFBE0	Orange
-0x79E0	Brown
-0x7E0	Green
-0x7FF	Cyan
-0x1F	Blue
-0xF81F	Pink
-
- */
-
 #include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
 #include <SPI.h>
 #include <WiFi.h>
 #include "time.h"
+#include <DHT.h>
 
+#define DHTPIN 17        // data DHT11
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+bool useFahrenheit       = false; // Default to Celsius
+//bool showTemp            = true; // Default to Temp / Humidity
+long lastDebounceButton1 = 0;    // Holds Button1 last debounce
+long lastDebounceButton2 = 0;    // Holds Button2 last debounce
+long debounceDelay       = 200;  // 200ms between re-polling
 
 #include "Button2.h"
-#define BUTTON_PIN  0
+#define BUTTON1_PIN  0
+#define BUTTON2_PIN  35
 Button2 button;
 
 //credentials
-const char* ssid       = "SSID";
-const char* password   = "PASSWORD";
+const char* ssid2       = "Tenda_8C2A30";
+const char* password2   = "existnose620";
+
+const char* ssid1       = "HUAWEI P20";
+const char* password1   = "a9leffeadiceracychlo";
+
+// by default
+const char* ssid = ssid1; 
+const char* password = password1;
 
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = 3600;  // + 1h
@@ -37,35 +38,52 @@ TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
 uint32_t targetTime = 0;       // for next 1 second timeout
 struct tm timeinfo;          // https://koor.fr/C/ctime/struct_tm.wp
-int hh, mm, ss, wday;
-const char * days[] = {
-        "Sun,", "Mon,", "Tue,", "Wed,", "Thu,", "Fri,", "Sat,"
-    };
+int hh, mm, ss, wday, year, mon, yday;
+const char * days[] = {"Sun,", "Mon,", "Tue,", "Wed,", "Thu,", "Fri,", "Sat,"};
+char buf[64];
+
 byte omm = 99;
 boolean initial = 1;
 byte xcolon = 0;
 unsigned int colour = 0;
 byte cpos = 0;   // second colon
 
+// left button toggle
 boolean toggle = 1; 
 boolean back = 1;   // back from scan
 
-static uint8_t conv2d(const char* p) {
-  uint8_t v = 0;
-  if ('0' <= *p && *p <= '9')
-    v = *p - '0';
-  return 10 * v + *++p - '0';
-}
+//static uint8_t conv2d(const char* p) {
+//  uint8_t v = 0;
+//  if ('0' <= *p && *p <= '9')
+//    v = *p - '0';
+//  return 10 * v + *++p - '0';
+//}
 
 //uint8_t hh=conv2d(__TIME__), mm=conv2d(__TIME__+3), ss=conv2d(__TIME__+6);  // Get H, M, S from compile time
 
+void printLocalTime(){ 
+  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");  
+  Serial.println(buf);
+  
+}
 
-void printLocalTime(){
-  if(!getLocalTime(&timeinfo)){
-    Serial.println("Failed to obtain time");
-    return;
+// INTRPT Function to execute when Button 1 is Pushed
+void IRAM_ATTR toggleButton1() {
+  if ((millis() - lastDebounceButton1) > debounceDelay) { 
+    if (useFahrenheit){useFahrenheit = false;}
+    else {useFahrenheit = true;}
+    lastDebounceButton1 = millis();
   }
-  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+}
+
+// INTRPT Function to execute when Button 2 is Pushed
+void IRAM_ATTR toggleButton2() {
+  if ((millis() - lastDebounceButton2) > debounceDelay) { 
+    if (useFahrenheit){useFahrenheit = false;}
+    else {useFahrenheit = true;}
+    //Serial.println(useFahrenheit);
+    lastDebounceButton2 = millis();
+  }
 }
 
 void click(Button2& btn) {
@@ -74,44 +92,134 @@ void click(Button2& btn) {
     tft.fillScreen(TFT_BLACK);   
 }
 
-void setup(void) {
-  Serial.begin(115200);
-  button.begin(BUTTON_PIN);
-  button.setLongClickDetectedHandler(click);
-  
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      Serial.print(".");
-  }
-  Serial.println(" CONNECTED");
-  
-  //init and get the time
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  printLocalTime();
+void connect() {
+    // connected to internet
+    //Serial.println(ssid);
+    //Serial.println(password);
+    int attempt = 0;
+    tft.fillScreen(TFT_BLACK);
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED && attempt < 10) {
+        delay(500);
+        Serial.print("."); 
+        colour = random(0xFFFF); tft.setTextColor(colour);
+        tft.drawString("Connecting ...",10,0,4);
+        attempt += 1;
+    }    
+}
 
+void get_data() {
+  //get the date and time and print on serial port
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   if(!getLocalTime(&timeinfo)){
     Serial.println("Failed to obtain time");
-  }
-  hh=timeinfo.tm_hour, mm=timeinfo.tm_min, ss=timeinfo.tm_sec, wday=timeinfo.tm_wday;
-  //Serial.print(hh,mm,ss);
-  
+    return;
+  }  
+  size_t written = strftime(buf, 64, "%b %d %Y", &timeinfo);
+  //Serial.println(written);
+}
+
+void disconnect() {
   //disconnect WiFi as it's no longer needed
   WiFi.disconnect(true);
+  tft.fillScreen(TFT_BLACK);
+  back = 1;
   WiFi.mode(WIFI_OFF);
+}
+
+void get_localtime() {
+  // get local time
+  get_data();
+  
+  hh=timeinfo.tm_hour, mm=timeinfo.tm_min, ss=timeinfo.tm_sec, wday=timeinfo.tm_wday;
+  mon=timeinfo.tm_mon, year=timeinfo.tm_year, yday=timeinfo.tm_yday; 
+}
+
+void welcome() {
+  Serial.println("==============================================================================");
+  Serial.print("Welcome to TTGO Display\nCompiled date : ");
+  Serial.print(__DATE__); Serial.print(" "); Serial.println(__TIME__);
+  Serial.println("First we will try to connect to the embedded SSIDs.");
+  //Serial.println("To change for a new SSID, send new ssid then new password from serial window"); 
+  Serial.println("Press left button to toggle between Clock/Wifi scan.");
+  Serial.println("Press right button to toggle between Celsius/Fahrenheit."); 
+  Serial.println("=============================================================================="); 
+}
+
+void setup(void) {
+  Serial.begin(115200);
+  welcome();
+  // init DH11
+  dht.begin();
 
   // start screen
   tft.init();
   tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_YELLOW, TFT_BLACK); // Note: the new fonts do not draw the background colour
-
-  targetTime = millis() + 1000; 
   
+  // init 2 buttons
+  //left button by click detection
+  button.begin(BUTTON1_PIN);
+  button.setLongClickDetectedHandler(click);
+  
+  // right button by interrupt
+  pinMode(BUTTON2_PIN, INPUT);
+  attachInterrupt(BUTTON2_PIN, toggleButton2, FALLING);
+     
+  // try to ssid1
+  connect(); 
+  if (WiFi.status() == WL_CONNECTED) Serial.println(" CONNECTED SSID #1");
+  else {    
+    // try ssid2
+    ssid = ssid2; password = password2;
+    connect();
+    if (WiFi.status() == WL_CONNECTED) Serial.println(" CONNECTED SSID #2");
+    else Serial.println(" Not connected !");
+  }
+    
+  get_localtime();
+  disconnect();
+  printLocalTime();
+  
+  // init timer to 1 second
+  targetTime = millis() + 1000;   
 }
 
+boolean serial1 = true;
+char new_ssid[20];
+char new_pass[20];
+
+// by default, show clock,temperature,humidity
 void show_clock() {
-  //button.loop();
+  if (Serial.available()){
+    if (serial1){
+      String buffer = Serial.readString();      
+      buffer.toCharArray(new_ssid,20);
+      Serial.print("New ssid: ");
+      Serial.println(new_ssid);
+      ssid = new_ssid;
+      serial1 = false;  
+    }
+    else {
+      String buffer = Serial.readString();
+      
+      buffer.toCharArray(new_pass,20);
+      Serial.print("New pass: ");
+      Serial.println(new_pass);
+      password = new_pass; 
+      serial1 = true;
+      //Serial.println(new_ssid);
+      connect();
+      if (WiFi.status() == WL_CONNECTED) Serial.println(" CONNECTED SSID #3\nPlease, close serial monitor to clear your credentials !");
+      get_data();
+      disconnect();
+    }
+    
+  }
+  
+  float t = dht.readTemperature(useFahrenheit);
+  float h = dht.readHumidity();
   tft.setRotation(1);
   if (back) tft.fillScreen(TFT_BLACK);
   if (targetTime < millis()) {
@@ -176,26 +284,42 @@ void show_clock() {
       //tft.setTextColor(0x39C4, TFT_BLACK);
       xpos+= tft.drawChar(':',xcolon,ypos,7);
       tft.setTextColor(0xFBE0, TFT_BLACK);
+      colour = random(0xFFFF); tft.setTextColor(colour);
+      if (mon==0) {tft.fillRect (0, 64, 250, 30, TFT_BLACK);tft.drawString("Happy New Year !",20,64,4);}
+      //else {
+        colour = random(0xFFFF); tft.setTextColor(colour);
+        //tft.drawString("T:",8,100,4);
+        tft.fillRect (0, 100, 120, 30, TFT_BLACK);
+        tft.drawString(String(t),8,100,4);
+        if (useFahrenheit){tft.drawString("F",80,100,4);}
+        else {tft.drawString("C",80,100,4);}
+        colour = random(0xFFFF); tft.setTextColor(colour);
+        //tft.drawString("H:",118,100,4);
+        tft.fillRect (118, 100, 80, 30, TFT_BLACK);
+        tft.drawString(String(h),130,100,4);
+        tft.drawString(" %",193,100,4);
+      //}
     }
     else {
       tft.drawChar(':',xcolon,ypos,7);
       colour = random(0xFFFF);
       // Erase the old text with a rectangle, the disadvantage of this method is increased display flicker
-      tft.fillRect (0, 64, 160, 20, TFT_BLACK);
+      tft.fillRect (0, 64, 250, 30, TFT_BLACK);
       tft.setTextColor(colour);
-      tft.drawRightString(days[wday],75,64,4); // Right justified string drawing to x position 75
+      tft.drawRightString(days[wday],70,64,4); // Right justified string drawing to x position 75
       
       //String scolour = String(colour,HEX);
       //scolour.toUpperCase();
       //char buffer[20];
       //scolour.toCharArray(buffer,20);
       //tft.drawString(buffer,82,64,4);
-      tft.drawString(__DATE__,82,64,4);
+      tft.drawString(__DATE__,82,64,4);      
     }
   } 
 
 }
 
+// show wifi scan results when left button is clicked
 void show_scan() {
    back = 1;
    tft.setRotation(0);
@@ -250,6 +374,7 @@ void loop() {
   button.loop();
   if (toggle) {
     show_clock();
+    //showScrn1();
   }
   else show_scan();
 }
