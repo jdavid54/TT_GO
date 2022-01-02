@@ -20,7 +20,7 @@ long debounceDelay       = 200;  // 200ms between re-polling
 Button2 button;
 
 //credentials
-const char* ssid2       = "SSID1";
+const char* ssid2       = "SSID2";
 const char* password2   = "PASSWORD2";
 
 const char* ssid1       = "SSID1";
