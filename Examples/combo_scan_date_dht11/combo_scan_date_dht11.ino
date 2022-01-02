@@ -1,19 +1,3 @@
-/*
-code	color
-0x0000	Black
-0xFFFF	White
-0xBDF7	Light Gray
-0x7BEF	Dark Gray
-0xF800	Red
-0xFFE0	Yellow
-0xFBE0	Orange
-0x79E0	Brown
-0x7E0	Green
-0x7FF	Cyan
-0x1F	Blue
-0xF81F	Pink
- */
-
 #include <TFT_eSPI.h> // Graphics and font library for ST7735 driver chip
 #include <SPI.h>
 #include <WiFi.h>
@@ -49,6 +33,7 @@ uint32_t targetTime = 0;       // for next 1 second timeout
 struct tm timeinfo;          // https://koor.fr/C/ctime/struct_tm.wp
 int hh, mm, ss, wday, year, mon, yday;
 const char * days[] = {"Sun,", "Mon,", "Tue,", "Wed,", "Thu,", "Fri,", "Sat,"};
+char buf[64];
 
 byte omm = 99;
 boolean initial = 1;
@@ -75,6 +60,7 @@ void printLocalTime(){
     return;
   }
   Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+  size_t written = strftime(buf, 64, "%b %d %Y", &timeinfo);
 }
 
 // INTRPT Function to execute when Button 1 is Pushed
@@ -246,7 +232,7 @@ void show_clock() {
       //char buffer[20];
       //scolour.toCharArray(buffer,20);
       //tft.drawString(buffer,82,64,4);
-      tft.drawString(__DATE__,82,64,4);      
+      tft.drawString(buf,82,64,4);      
     }
   } 
 
